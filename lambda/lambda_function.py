@@ -4,6 +4,18 @@ import urllib.request
 import urllib.error
 import boto3
 from datetime import datetime
+from decimal import Decimal
+
+
+def convert_floats_to_decimals(obj):
+    """Recursively convert all floats in a dict/list to Decimal."""
+    if isinstance(obj, float):
+        return Decimal(str(obj))
+    elif isinstance(obj, dict):
+        return {k: convert_floats_to_decimals(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [convert_floats_to_decimals(i) for i in obj]
+    return obj
 
 DYNAMODB_TABLE = os.environ['DYNAMODB_TABLE']
 SNS_TOPIC_ARN = os.environ['SNS_TOPIC_ARN']
@@ -58,14 +70,14 @@ def handler(event, context):
         table = dynamodb.Table(DYNAMODB_TABLE)
         timestamp = datetime.utcnow().isoformat()
         record = {
-            'location': 'Leipzig',
-            'timestamp': timestamp,
-            'temp_c': temp,
-            'temp_f': round(temp_f, 2),
-            'humidity': humidity,
-            'heat_index': heat_index
+            "location": "Leipzig",
+            "timestamp": timestamp,
+            "temperature": Decimal(str(temp)),
+            "humidity": Decimal(str(humidity)),
+            "heat_index": Decimal(str(heat_index)),
         }
-        table.put_item(Item=record)
+
+        table.put_item(Item=convert_floats_to_decimals(record))
 
         secret = secrets.get_secret_value(SecretId=SECRET_ARN)
         threshold = json.loads(secret['SecretString'])['threshold']
@@ -79,7 +91,7 @@ def handler(event, context):
                 Subject="Weather Alert: High Heat Index"
             )
 
-        return {"statusCode": 200, "body": json.dumps(record)}
+        return {"statusCode": 200, "body": json.dumps(record, default=str)}
 
     except Exception as e:
         print(f"ERROR: {str(e)}")
